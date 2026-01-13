@@ -1,0 +1,32 @@
+# Rust build artifacts
+/target
+debug/
+release/
+*.rs.bk
+*.rlib
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Environment and secrets
+.env*
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+
+# Test artifacts
+*.pkg
+*.intunewin
+
+# Claude Code
+CLAUDE.md
+
+# Test artifacts
+test-pkg/
+*.pkg

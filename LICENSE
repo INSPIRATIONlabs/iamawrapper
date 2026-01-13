@@ -1,0 +1,103 @@
+IAMAWRAPPER LICENSE
+Version 1.0, January 2026
+
+Copyright (c) 2026 INSPIRATIONLABS GmbH
+https://inspirationlabs.com
+
+================================================================================
+TERMS AND CONDITIONS
+================================================================================
+
+1. DEFINITIONS
+
+"Software" means the iamawrapper application, including all source code,
+documentation, and associated files.
+
+"Commercial Product" means any software, service, or offering that is sold,
+licensed, or monetized, either directly or indirectly.
+
+"Competing Product" means any Commercial Product that provides functionality
+substantially similar to:
+  - Software packaging or deployment tools
+  - Patch management systems
+  - Application lifecycle management
+  - Mobile Device Management (MDM) solutions
+  - Endpoint management platforms
+  - Software distribution services
+
+"You" means the individual or entity exercising the rights granted under
+this License.
+
+--------------------------------------------------------------------------------
+
+2. GRANT OF RIGHTS
+
+Subject to the terms of this License, INSPIRATIONLABS GmbH grants You a
+non-exclusive, worldwide, royalty-free license to:
+
+  a) Use the Software to package your own applications
+  b) Use the Software for internal business operations
+  c) Use the Software for personal, educational, or non-commercial purposes
+  d) View, study, and modify the source code
+  e) Distribute the Software, provided this License is included
+
+--------------------------------------------------------------------------------
+
+3. RESTRICTIONS
+
+You MAY NOT:
+
+  a) Use the Software to build, create, or provide a Competing Product
+
+  b) Offer the Software as a hosted or managed service (SaaS) to third parties
+
+  c) Remove, alter, or obscure any licensing, copyright, or other notices
+
+  d) Use the Software in any way that competes with products or services
+     offered by INSPIRATIONLABS GmbH
+
+--------------------------------------------------------------------------------
+
+4. COMMERCIAL LICENSE
+
+If Your use case falls outside the rights granted in Section 2, or if You
+wish to use the Software in a Competing Product, You must obtain a Commercial
+License from INSPIRATIONLABS GmbH.
+
+For Commercial Licensing inquiries, contact:
+  Email: license@inspirationlabs.com
+  Web:   https://inspirationlabs.com/iamawrapper/licensing
+
+--------------------------------------------------------------------------------
+
+5. CONTRIBUTIONS
+
+If You submit contributions (code, documentation, or other materials) to
+this project, You grant INSPIRATIONLABS GmbH a perpetual, worldwide,
+non-exclusive, royalty-free license to use, modify, and distribute Your
+contributions under any license, including proprietary licenses.
+
+--------------------------------------------------------------------------------
+
+6. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+IN NO EVENT SHALL INSPIRATIONLABS GMBH BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+7. TERMINATION
+
+This License terminates automatically if You violate any of its terms.
+Upon termination, You must cease all use of the Software and destroy any
+copies in Your possession.
+
+================================================================================
+END OF LICENSE
+================================================================================
