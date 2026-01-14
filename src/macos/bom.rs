@@ -39,105 +39,75 @@ struct BomWriter {
 
 impl BomWriter {
     fn new() -> Self {
-        // Block 0 is always null/empty
         Self {
-            blocks: vec![vec![]],
+            blocks: vec![vec![]], // Block 0 is always null/empty
             vars: Vec::new(),
         }
     }
 
-    /// Add a data block and return its index
     fn add_block(&mut self, data: Vec<u8>) -> u32 {
         let index = self.blocks.len() as u32;
         self.blocks.push(data);
         index
     }
 
-    /// Add a named variable pointing to a block (order preserved)
     fn add_var(&mut self, name: &str, block_index: u32) {
         self.vars.push((name.to_string(), block_index));
     }
 
-    /// Write 32-bit big-endian value
     fn write_u32_be(buf: &mut Vec<u8>, val: u32) {
         buf.extend_from_slice(&val.to_be_bytes());
     }
 
-    /// Write 16-bit big-endian value
     fn write_u16_be(buf: &mut Vec<u8>, val: u16) {
         buf.extend_from_slice(&val.to_be_bytes());
     }
 
-    /// Build a tree structure for paths
-    fn build_tree(&mut self, child_block: u32, path_count: u32) -> u32 {
+    fn build_empty_leaf(&mut self) -> u32 {
         let mut data = Vec::new();
-        // "tree" magic
-        data.extend_from_slice(b"tree");
-        // version = 1
-        Self::write_u32_be(&mut data, 1);
-        // child (points to BOMPaths leaf node)
-        Self::write_u32_be(&mut data, child_block);
-        // blockSize = 4096
-        Self::write_u32_be(&mut data, 4096);
-        // pathCount
-        Self::write_u32_be(&mut data, path_count);
-        // unknown3
-        data.push(0);
-
+        Self::write_u16_be(&mut data, 1); // isLeaf = true
+        Self::write_u16_be(&mut data, 0); // count = 0
+        Self::write_u32_be(&mut data, 0); // forward = 0
+        Self::write_u32_be(&mut data, 0); // backward = 0
         self.add_block(data)
     }
 
-    /// Build an empty tree (for HLIndex, Size64)
-    fn build_empty_tree(&mut self) -> u32 {
-        // Empty leaf node - just the header, no padding needed for empty trees
-        let mut leaf_data = Vec::new();
-        BomWriter::write_u16_be(&mut leaf_data, 1); // isLeaf = true
-        BomWriter::write_u16_be(&mut leaf_data, 0); // count = 0
-        BomWriter::write_u32_be(&mut leaf_data, 0); // forward = 0
-        BomWriter::write_u32_be(&mut leaf_data, 0); // backward = 0
-        let empty_leaf = self.add_block(leaf_data);
+    fn build_tree_with_block_size(&mut self, child: u32, path_count: u32, block_size: u32) -> u32 {
+        let mut data = Vec::new();
+        data.extend_from_slice(b"tree");
+        Self::write_u32_be(&mut data, 1); // version
+        Self::write_u32_be(&mut data, child);
+        Self::write_u32_be(&mut data, block_size);
+        Self::write_u32_be(&mut data, path_count);
+        data.push(0); // unknown3
+        self.add_block(data)
+    }
 
-        // Tree pointing to empty leaf
+    fn build_tree(&mut self, child: u32, path_count: u32) -> u32 {
+        self.build_tree_with_block_size(child, path_count, 4096)
+    }
+
+    fn build_empty_tree(&mut self) -> u32 {
+        let empty_leaf = self.build_empty_leaf();
         self.build_tree(empty_leaf, 0)
     }
 
-    /// Build VIndex structure (special format with 13-byte header pointing to tree)
     fn build_vindex(&mut self) -> u32 {
-        // Empty leaf node for VIndex tree
-        let mut leaf_data = Vec::new();
-        BomWriter::write_u16_be(&mut leaf_data, 1); // isLeaf = true
-        BomWriter::write_u16_be(&mut leaf_data, 0); // count = 0
-        BomWriter::write_u32_be(&mut leaf_data, 0); // forward = 0
-        BomWriter::write_u32_be(&mut leaf_data, 0); // backward = 0
-        let empty_leaf = self.add_block(leaf_data);
+        let empty_leaf = self.build_empty_leaf();
+        let tree_block = self.build_tree_with_block_size(empty_leaf, 0, 128);
 
-        // VIndex tree with blockSize=128 (different from other trees!)
-        let mut tree_data = Vec::new();
-        tree_data.extend_from_slice(b"tree");
-        Self::write_u32_be(&mut tree_data, 1); // version
-        Self::write_u32_be(&mut tree_data, empty_leaf); // child
-        Self::write_u32_be(&mut tree_data, 128); // blockSize = 128 (special for VIndex)
-        Self::write_u32_be(&mut tree_data, 0); // pathCount = 0
-        tree_data.push(0); // unknown3
-        let tree_block = self.add_block(tree_data);
-
-        // VIndex header structure (13 bytes)
         let mut vindex_data = Vec::new();
-        Self::write_u32_be(&mut vindex_data, 1); // unknown0 = 1
+        Self::write_u32_be(&mut vindex_data, 1); // unknown0
         Self::write_u32_be(&mut vindex_data, tree_block); // indexToVTree
-        Self::write_u32_be(&mut vindex_data, 0); // unknown2 = 0
-        vindex_data.push(0); // unknown3 = 0
+        Self::write_u32_be(&mut vindex_data, 0); // unknown2
+        vindex_data.push(0); // unknown3
         self.add_block(vindex_data)
     }
 
-    /// Build the final BOM file
     fn build(self) -> Vec<u8> {
-        let mut output = Vec::new();
+        const HEADER_SIZE: usize = 512;
 
-        // Layout: [header 512] [vars] [blocks...] [block_table]
-        let header_size = 512;
-
-        // Build vars table (order is preserved from insertion)
+        // Build vars table
         let mut vars_data = Vec::new();
         Self::write_u32_be(&mut vars_data, self.vars.len() as u32);
         for (name, index) in &self.vars {
@@ -146,64 +116,109 @@ impl BomWriter {
             vars_data.extend_from_slice(name.as_bytes());
         }
 
-        // Calculate total block data size (skip block 0 which is null)
+        // Calculate layout offsets
         let total_blocks_size: usize = self.blocks.iter().skip(1).map(|b| b.len()).sum();
-
-        // Calculate offsets - vars right after header, then blocks
-        let vars_offset = header_size;
-        let blocks_start = vars_offset + vars_data.len();
+        let blocks_start = HEADER_SIZE + vars_data.len();
         let index_offset = blocks_start + total_blocks_size;
 
-        // Build block table - addresses point to blocks area
-        // Format: [numberOfBlockTablePointers: u32][entries as address,length pairs...]
+        // Build block table
         let mut block_table = Vec::new();
-        Self::write_u32_be(&mut block_table, self.blocks.len() as u32); // numberOfBlockTablePointers
+        Self::write_u32_be(&mut block_table, self.blocks.len() as u32);
 
         let mut current_offset = blocks_start as u32;
         for (i, block) in self.blocks.iter().enumerate() {
             if i == 0 {
-                // Block 0 is the null block - always offset 0, size 0
-                Self::write_u32_be(&mut block_table, 0); // address
-                Self::write_u32_be(&mut block_table, 0); // length
+                Self::write_u32_be(&mut block_table, 0);
+                Self::write_u32_be(&mut block_table, 0);
             } else {
-                // Block table entry format: [address][length] per entry
-                Self::write_u32_be(&mut block_table, current_offset); // address
-                Self::write_u32_be(&mut block_table, block.len() as u32); // length
+                Self::write_u32_be(&mut block_table, current_offset);
+                Self::write_u32_be(&mut block_table, block.len() as u32);
                 current_offset += block.len() as u32;
             }
         }
-
-        // Free list - bomutils uses 0 entries for new BOMs
-        // Format: [numberOfFreeListPointers: u32]
-        Self::write_u32_be(&mut block_table, 0); // numberOfFreeListPointers = 0
+        Self::write_u32_be(&mut block_table, 0); // empty free list
 
         // Write header
-        output.extend_from_slice(b"BOMStore"); // magic
+        let mut output = Vec::new();
+        output.extend_from_slice(b"BOMStore");
         Self::write_u32_be(&mut output, 1); // version
-        Self::write_u32_be(&mut output, (self.blocks.len() - 1) as u32); // numberOfBlocks (non-null)
-        Self::write_u32_be(&mut output, index_offset as u32); // indexOffset
-        Self::write_u32_be(&mut output, block_table.len() as u32); // indexLength
-        Self::write_u32_be(&mut output, vars_offset as u32); // varsOffset
-        Self::write_u32_be(&mut output, vars_data.len() as u32); // varsLength
+        Self::write_u32_be(&mut output, (self.blocks.len() - 1) as u32);
+        Self::write_u32_be(&mut output, index_offset as u32);
+        Self::write_u32_be(&mut output, block_table.len() as u32);
+        Self::write_u32_be(&mut output, HEADER_SIZE as u32);
+        Self::write_u32_be(&mut output, vars_data.len() as u32);
+        output.resize(HEADER_SIZE, 0);
 
-        // Pad header to standard size
-        while output.len() < header_size {
-            output.push(0);
-        }
-
-        // Write vars table (right after header)
+        // Append vars, blocks, and block table
         output.extend_from_slice(&vars_data);
-
-        // Write all blocks after vars, skip block 0 which is null
         for block in self.blocks.iter().skip(1) {
             output.extend_from_slice(block);
         }
-
-        // Write block table (index) at the end
         output.extend_from_slice(&block_table);
 
         output
     }
+}
+
+/// Build a PathInfo2 block for a path entry.
+fn build_path_info2(entry: Option<&BomEntry>) -> Vec<u8> {
+    let mut data = Vec::new();
+
+    let (file_type, mode, uid, gid, size) = match entry {
+        Some(e) => {
+            let is_dir = e.mode & 0o170000 == 0o040000;
+            let file_type = if is_dir { TYPE_DIR } else { TYPE_FILE };
+            (
+                file_type,
+                (e.mode & 0xFFFF) as u16,
+                e.uid,
+                e.gid,
+                e.size as u32,
+            )
+        }
+        None => (TYPE_DIR, 0o40755, 0, 80, 0),
+    };
+
+    data.push(file_type);
+    data.push(1); // unknown0
+    BomWriter::write_u16_be(&mut data, 3); // architecture
+    BomWriter::write_u16_be(&mut data, mode);
+    BomWriter::write_u32_be(&mut data, uid);
+    BomWriter::write_u32_be(&mut data, gid);
+    BomWriter::write_u32_be(&mut data, 0); // modtime
+    BomWriter::write_u32_be(&mut data, size);
+    data.push(1); // unknown1
+    BomWriter::write_u32_be(&mut data, 0); // checksum
+    BomWriter::write_u32_be(&mut data, 0); // linkNameLength
+
+    data
+}
+
+/// Get the parent ID for a path.
+fn get_parent_id(path_str: &str, path_ids: &HashMap<String, u32>) -> u32 {
+    if path_str == "." {
+        return 0;
+    }
+
+    let path = PathBuf::from(path_str);
+    match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => *path_ids
+            .get(&parent.to_string_lossy().to_string())
+            .unwrap_or(&1),
+        _ => 1, // Top-level entry, parent is root "."
+    }
+}
+
+/// Get the file name component for a path.
+fn get_file_name(path_str: &str) -> String {
+    if path_str == "." {
+        return ".".to_string();
+    }
+
+    PathBuf::from(path_str)
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| path_str.to_string())
 }
 
 /// Create a BOM file from a list of entries.
@@ -215,181 +230,109 @@ pub fn create_bom(entries: &[BomEntry]) -> Result<Vec<u8>, PackageError> {
     }
 
     let mut writer = BomWriter::new();
-
-    // Reserve block 1 for BomInfo (will fill in later) - 28 bytes (matches bomutils)
     let bom_info_placeholder = writer.add_block(vec![0u8; 28]);
 
-    // Assign IDs to all paths (including implicit parent directories)
-    // ID 0 is reserved for "no parent" in BOMFile, so IDs start from 1
+    // Collect all paths (including implicit parent directories)
+    // ID 0 is reserved for "no parent", so IDs start from 1
     let mut path_ids: HashMap<String, u32> = HashMap::new();
     let mut all_paths: Vec<(String, Option<&BomEntry>)> = Vec::new();
 
-    // Root directory "." gets ID 1 (not 0, since 0 means "no parent")
     path_ids.insert(".".to_string(), 1);
     all_paths.push((".".to_string(), None));
 
-    // Collect all paths including implicit parent directories
     let mut next_id = 2u32;
     for entry in entries {
         let path_str = entry.path.to_string_lossy().to_string();
-
-        // Add all parent directories
         let mut current = PathBuf::new();
+
         for component in entry.path.components() {
             current.push(component);
             let current_str = current.to_string_lossy().to_string();
             if !path_ids.contains_key(&current_str) {
                 path_ids.insert(current_str.clone(), next_id);
-                // Check if this is the actual entry or an implicit directory
-                if current_str == path_str {
-                    all_paths.push((current_str, Some(entry)));
+                let maybe_entry = if current_str == path_str {
+                    Some(entry)
                 } else {
-                    all_paths.push((current_str, None));
-                }
+                    None
+                };
+                all_paths.push((current_str, maybe_entry));
                 next_id += 1;
             }
         }
     }
 
-    // Build PathInfo2 blocks for each path
+    // Build PathInfo2 blocks
     let mut path_info2_blocks: HashMap<u32, u32> = HashMap::new();
-
     for (path_str, maybe_entry) in &all_paths {
         let id = path_ids[path_str];
-
-        let mut info2 = Vec::new();
-
-        if let Some(entry) = maybe_entry {
-            // Use actual entry data
-            let is_dir = entry.mode & 0o170000 == 0o040000;
-            info2.push(if is_dir { TYPE_DIR } else { TYPE_FILE });
-            info2.push(1); // unknown0
-            BomWriter::write_u16_be(&mut info2, 3); // architecture (always 3)
-            // Mode includes file type bits (0o40755 for dir, 0o100644 for file)
-            BomWriter::write_u16_be(&mut info2, (entry.mode & 0xFFFF) as u16);
-            BomWriter::write_u32_be(&mut info2, entry.uid); // user
-            BomWriter::write_u32_be(&mut info2, entry.gid); // group
-            BomWriter::write_u32_be(&mut info2, 0); // modtime
-            BomWriter::write_u32_be(&mut info2, entry.size as u32); // size
-            info2.push(1); // unknown1 (u8, always 1)
-            BomWriter::write_u32_be(&mut info2, 0); // checksum
-            BomWriter::write_u32_be(&mut info2, 0); // linkNameLength
-        } else {
-            // Implicit directory - use full mode with file type (0o40755)
-            info2.push(TYPE_DIR);
-            info2.push(1); // unknown0
-            BomWriter::write_u16_be(&mut info2, 3); // architecture (always 3)
-            BomWriter::write_u16_be(&mut info2, 0o40755); // mode with directory type
-            BomWriter::write_u32_be(&mut info2, 0); // user
-            BomWriter::write_u32_be(&mut info2, 80); // group
-            BomWriter::write_u32_be(&mut info2, 0); // modtime
-            BomWriter::write_u32_be(&mut info2, 0); // size
-            info2.push(1); // unknown1 (u8, always 1)
-            BomWriter::write_u32_be(&mut info2, 0); // checksum
-            BomWriter::write_u32_be(&mut info2, 0); // linkNameLength
-        }
-
-        let block_idx = writer.add_block(info2);
+        let block_idx = writer.add_block(build_path_info2(*maybe_entry));
         path_info2_blocks.insert(id, block_idx);
     }
 
     // Build PathInfo1 blocks
     let mut path_info1_blocks: HashMap<u32, u32> = HashMap::new();
-
     for (path_str, _) in &all_paths {
         let id = path_ids[path_str];
-
-        let mut info1 = Vec::new();
-        BomWriter::write_u32_be(&mut info1, id);
-        BomWriter::write_u32_be(&mut info1, path_info2_blocks[&id]);
-
-        let block_idx = writer.add_block(info1);
-        path_info1_blocks.insert(id, block_idx);
+        let mut data = Vec::new();
+        BomWriter::write_u32_be(&mut data, id);
+        BomWriter::write_u32_be(&mut data, path_info2_blocks[&id]);
+        path_info1_blocks.insert(id, writer.add_block(data));
     }
 
-    // Build BOMFile blocks (name + parent reference)
+    // Build BOMFile blocks (parent reference + name)
     let mut file_blocks: HashMap<u32, u32> = HashMap::new();
-
     for (path_str, _) in &all_paths {
         let id = path_ids[path_str];
-        let path = PathBuf::from(path_str);
-
-        let mut file_data = Vec::new();
-
-        // Find parent ID (0 = no parent, 1 = root ".")
-        let parent_id = if path_str == "." {
-            0 // Root has no parent
-        } else if let Some(parent) = path.parent() {
-            if parent.as_os_str().is_empty() {
-                1 // Top-level entry, parent is root "." which has ID 1
-            } else {
-                let parent_str = parent.to_string_lossy().to_string();
-                *path_ids.get(&parent_str).unwrap_or(&1)
-            }
-        } else {
-            1 // Default to root
-        };
-
-        BomWriter::write_u32_be(&mut file_data, parent_id);
-
-        // File name (just the last component)
-        let name = if path_str == "." {
-            ".".to_string()
-        } else {
-            path.file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| path_str.clone())
-        };
-        file_data.extend_from_slice(name.as_bytes());
-        file_data.push(0); // null terminator
-
-        let block_idx = writer.add_block(file_data);
-        file_blocks.insert(id, block_idx);
+        let mut data = Vec::new();
+        BomWriter::write_u32_be(&mut data, get_parent_id(path_str, &path_ids));
+        data.extend_from_slice(get_file_name(path_str).as_bytes());
+        data.push(0); // null terminator
+        file_blocks.insert(id, writer.add_block(data));
     }
 
-    // Build BOMPaths (leaf node containing all path indices)
+    // Build BOMPaths leaf node
     let mut paths_data = Vec::new();
-    BomWriter::write_u16_be(&mut paths_data, 1); // isLeaf = true
-    BomWriter::write_u16_be(&mut paths_data, all_paths.len() as u16); // count
+    BomWriter::write_u16_be(&mut paths_data, 1); // isLeaf
+    BomWriter::write_u16_be(&mut paths_data, all_paths.len() as u16);
     BomWriter::write_u32_be(&mut paths_data, 0); // forward
     BomWriter::write_u32_be(&mut paths_data, 0); // backward
 
-    // Write path indices
     for (path_str, _) in &all_paths {
         let id = path_ids[path_str];
-        BomWriter::write_u32_be(&mut paths_data, path_info1_blocks[&id]); // index0 -> PathInfo1
-        BomWriter::write_u32_be(&mut paths_data, file_blocks[&id]); // index1 -> BOMFile
+        BomWriter::write_u32_be(&mut paths_data, path_info1_blocks[&id]);
+        BomWriter::write_u32_be(&mut paths_data, file_blocks[&id]);
     }
 
     let paths_leaf_block = writer.add_block(paths_data);
-
-    // Build tree structure pointing to the leaf
     let paths_tree_block = writer.build_tree(paths_leaf_block, all_paths.len() as u32);
 
-    // Build empty trees for HLIndex, VIndex, and Size64
+    // Build auxiliary trees
     let hl_index_block = writer.build_empty_tree();
     let v_index_block = writer.build_vindex();
     let size64_block = writer.build_empty_tree();
 
-    // Now fill in the BomInfo placeholder (block 1) with real data
-    // BomInfo is 28 bytes: version, numberOfPaths, numberOfInfoEntries + 16 bytes padding
+    // Fill in BomInfo
     let mut bom_info_data = Vec::new();
     BomWriter::write_u32_be(&mut bom_info_data, 1); // version
-    BomWriter::write_u32_be(&mut bom_info_data, all_paths.len() as u32); // numberOfPaths
+    BomWriter::write_u32_be(&mut bom_info_data, all_paths.len() as u32);
     BomWriter::write_u32_be(&mut bom_info_data, 1); // numberOfInfoEntries
-    // Padding to match bomutils format (16 more bytes of zeros)
     bom_info_data.resize(28, 0);
     writer.blocks[bom_info_placeholder as usize] = bom_info_data;
 
-    // Add named variables (matching Apple's mkbom order: BomInfo, Paths, HLIndex, VIndex, Size64)
+    // Add named variables
     writer.add_var("BomInfo", bom_info_placeholder);
     writer.add_var("Paths", paths_tree_block);
     writer.add_var("HLIndex", hl_index_block);
     writer.add_var("VIndex", v_index_block);
     writer.add_var("Size64", size64_block);
 
-    // Build the final BOM
     Ok(writer.build())
+}
+
+fn bom_err(e: impl std::fmt::Display) -> PackageError {
+    PackageError::BomError {
+        reason: e.to_string(),
+    }
 }
 
 /// Create a BOM file by scanning a directory.
@@ -399,22 +342,10 @@ pub fn create_bom_from_directory(path: &std::path::Path) -> Result<Vec<u8>, Pack
     use walkdir::WalkDir;
 
     let mut entries = Vec::new();
-
     for entry in WalkDir::new(path).min_depth(1) {
-        let entry = entry.map_err(|e| PackageError::BomError {
-            reason: e.to_string(),
-        })?;
-
-        let rel_path = entry
-            .path()
-            .strip_prefix(path)
-            .map_err(|e| PackageError::BomError {
-                reason: e.to_string(),
-            })?;
-
-        let metadata = entry.metadata().map_err(|e| PackageError::BomError {
-            reason: e.to_string(),
-        })?;
+        let entry = entry.map_err(bom_err)?;
+        let rel_path = entry.path().strip_prefix(path).map_err(bom_err)?;
+        let metadata = entry.metadata().map_err(bom_err)?;
 
         entries.push(BomEntry {
             path: rel_path.to_path_buf(),
@@ -434,24 +365,11 @@ pub fn create_bom_from_directory(path: &std::path::Path) -> Result<Vec<u8>, Pack
     use walkdir::WalkDir;
 
     let mut entries = Vec::new();
-
     for entry in WalkDir::new(path).min_depth(1) {
-        let entry = entry.map_err(|e| PackageError::BomError {
-            reason: e.to_string(),
-        })?;
+        let entry = entry.map_err(bom_err)?;
+        let rel_path = entry.path().strip_prefix(path).map_err(bom_err)?;
+        let metadata = entry.metadata().map_err(bom_err)?;
 
-        let rel_path = entry
-            .path()
-            .strip_prefix(path)
-            .map_err(|e| PackageError::BomError {
-                reason: e.to_string(),
-            })?;
-
-        let metadata = entry.metadata().map_err(|e| PackageError::BomError {
-            reason: e.to_string(),
-        })?;
-
-        // On Windows, use default Unix permissions
         let mode = if metadata.is_dir() {
             0o040755
         } else if metadata.permissions().readonly() {
@@ -463,8 +381,8 @@ pub fn create_bom_from_directory(path: &std::path::Path) -> Result<Vec<u8>, Pack
         entries.push(BomEntry {
             path: rel_path.to_path_buf(),
             mode,
-            uid: 0,  // Default to root
-            gid: 80, // Default to admin group
+            uid: 0,
+            gid: 80,
             size: metadata.len(),
         });
     }
