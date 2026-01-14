@@ -1,0 +1,20 @@
+#!/bin/bash
+#
+# Preinstall script for Contoso Configuration Tool
+# This script runs before the package files are installed
+#
+
+LOG_FILE="/var/log/contoso-install.log"
+
+echo "$(date): Starting Contoso Tool installation..." >> "$LOG_FILE"
+
+# Check for existing installation
+if [ -d "/Applications/ContosoTool.app" ]; then
+    echo "$(date): Found existing installation, will be upgraded" >> "$LOG_FILE"
+fi
+
+# Check system requirements
+OS_VERSION=$(sw_vers -productVersion)
+echo "$(date): macOS version: $OS_VERSION" >> "$LOG_FILE"
+
+exit 0

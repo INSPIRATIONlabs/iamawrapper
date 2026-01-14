@@ -1,0 +1,23 @@
+#!/bin/bash
+#
+# Postinstall script for Contoso Configuration Tool
+# This script runs after the package files are installed
+#
+
+LOG_FILE="/var/log/contoso-install.log"
+APP_PATH="/Applications/ContosoTool.app"
+
+echo "$(date): Running post-installation tasks..." >> "$LOG_FILE"
+
+# Set correct permissions on the executable
+if [ -f "$APP_PATH/Contents/MacOS/contoso-tool" ]; then
+    chmod +x "$APP_PATH/Contents/MacOS/contoso-tool"
+    echo "$(date): Set executable permissions" >> "$LOG_FILE"
+fi
+
+# Register with Launch Services
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_PATH" 2>/dev/null
+
+echo "$(date): Contoso Tool installation completed successfully" >> "$LOG_FILE"
+
+exit 0

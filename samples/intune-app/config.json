@@ -1,0 +1,15 @@
+{
+    "app_name": "Contoso Configuration Tool",
+    "version": "1.0.0",
+    "publisher": "Contoso Corporation",
+    "settings": {
+        "auto_update": true,
+        "telemetry_enabled": false,
+        "log_level": "info",
+        "check_interval_hours": 24
+    },
+    "endpoints": {
+        "config_server": "https://config.contoso.com/api/v1",
+        "update_server": "https://updates.contoso.com"
+    }
+}
