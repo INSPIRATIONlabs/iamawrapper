@@ -436,9 +436,10 @@ impl XarBuilder {
 
         // Compute SHA1 of compressed TOC for the heap checksum
         let toc_checksum = Self::compute_sha1(&toc_compressed);
-        let toc_checksum_bytes = hex::decode(&toc_checksum).map_err(|e| PackageError::XarError {
-            reason: format!("Failed to decode TOC checksum: {}", e),
-        })?;
+        let toc_checksum_bytes =
+            hex::decode(&toc_checksum).map_err(|e| PackageError::XarError {
+                reason: format!("Failed to decode TOC checksum: {}", e),
+            })?;
 
         // Write heap: TOC checksum first (20 bytes at offset 0)
         writer

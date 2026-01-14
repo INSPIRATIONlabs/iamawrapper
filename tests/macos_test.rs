@@ -2,7 +2,7 @@
 //!
 //! Tests basic package creation workflow.
 
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
@@ -24,7 +24,7 @@ fn test_macos_pkg_basic_creation() {
     let output_file = output_dir.join("test.pkg");
 
     // Run the command
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args([
         "macos",
         "pkg",
@@ -57,7 +57,7 @@ fn test_macos_pkg_missing_identifier() {
 
     let output_file = temp_dir.path().join("test.pkg");
 
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args([
         "macos",
         "pkg",
@@ -84,7 +84,7 @@ fn test_macos_pkg_missing_version() {
 
     let output_file = temp_dir.path().join("test.pkg");
 
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args([
         "macos",
         "pkg",
@@ -107,7 +107,7 @@ fn test_macos_pkg_missing_source_folder() {
     let temp_dir = TempDir::new().unwrap();
     let output_file = temp_dir.path().join("test.pkg");
 
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args([
         "macos",
         "pkg",
@@ -133,7 +133,7 @@ fn test_macos_pkg_empty_source_folder() {
 
     let output_file = temp_dir.path().join("test.pkg");
 
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args([
         "macos",
         "pkg",
@@ -159,7 +159,7 @@ fn test_macos_pkg_with_install_location() {
 
     let output_file = temp_dir.path().join("test.pkg");
 
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args([
         "macos",
         "pkg",
@@ -192,7 +192,7 @@ fn test_macos_pkg_with_subdirectories() {
 
     let output_file = temp_dir.path().join("test.pkg");
 
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args([
         "macos",
         "pkg",
@@ -236,7 +236,7 @@ fn test_macos_pkg_with_scripts() {
 
     let output_file = temp_dir.path().join("test.pkg");
 
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args([
         "macos",
         "pkg",
@@ -277,7 +277,7 @@ fn test_macos_pkg_with_preinstall_only() {
 
     let output_file = temp_dir.path().join("test.pkg");
 
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args([
         "macos",
         "pkg",
@@ -311,7 +311,7 @@ fn test_macos_pkg_with_postinstall_only() {
 
     let output_file = temp_dir.path().join("test.pkg");
 
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args([
         "macos",
         "pkg",
@@ -341,7 +341,7 @@ fn test_macos_pkg_scripts_folder_not_found() {
 
     let output_file = temp_dir.path().join("test.pkg");
 
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args([
         "macos",
         "pkg",

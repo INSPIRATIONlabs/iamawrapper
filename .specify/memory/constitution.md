@@ -78,8 +78,9 @@ Beautiful code is maintainable code:
 - **Dead code MUST be deleted**, not commented out
 - **Magic numbers and strings MUST be named constants**
 - **Comments explain "why", not "what"** - code itself shows what
+- **Deprecated functions/APIs MUST NOT be used** - always use the recommended replacement; if deprecated code exists, it MUST be updated when encountered
 
-**Rationale**: Code is read far more often than written. Clear, beautiful code reduces cognitive load, accelerates onboarding, and prevents bugs from hiding in complexity.
+**Rationale**: Code is read far more often than written. Clear, beautiful code reduces cognitive load, accelerates onboarding, and prevents bugs from hiding in complexity. Using deprecated APIs creates technical debt and risks breaking changes in future updates.
 
 ### IV. Defensive Programming
 
@@ -138,4 +139,4 @@ This constitution is the supreme authority for development practices in this pro
 - **Compliance verification**: All PRs and code reviews MUST verify compliance with these principles
 - **Violations MUST be justified**: Any deviation from these principles requires explicit documentation of why it was necessary and what alternatives were rejected
 
-**Version**: 1.0.0 | **Ratified**: 2026-01-09 | **Last Amended**: 2026-01-09
+**Version**: 1.1.0 | **Ratified**: 2026-01-09 | **Last Amended**: 2026-01-14

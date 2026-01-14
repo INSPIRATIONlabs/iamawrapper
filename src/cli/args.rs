@@ -25,7 +25,6 @@ pub struct CliArgs {
     pub silent: bool,
 }
 
-
 /// Top-level commands
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
@@ -159,7 +158,6 @@ pub struct LegacyCliArgs {
     #[arg(long = "silent", visible_alias = "qq")]
     pub silent: bool,
 }
-
 
 impl CliArgs {
     /// Get the verbosity level.

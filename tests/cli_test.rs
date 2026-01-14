@@ -2,13 +2,13 @@
 //!
 //! Tests that the CLI properly routes to macos subcommands.
 
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 
 /// T024: Test that `macos pkg` subcommand is recognized
 #[test]
 fn test_macos_subcommand_exists() {
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args(["macos", "--help"]);
 
     cmd.assert()
@@ -18,7 +18,7 @@ fn test_macos_subcommand_exists() {
 
 #[test]
 fn test_macos_pkg_subcommand_help() {
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args(["macos", "pkg", "--help"]);
 
     cmd.assert()
@@ -31,7 +31,7 @@ fn test_macos_pkg_subcommand_help() {
 
 #[test]
 fn test_intune_subcommand_exists() {
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args(["intune", "--help"]);
 
     cmd.assert()
@@ -41,7 +41,7 @@ fn test_intune_subcommand_exists() {
 
 #[test]
 fn test_intune_create_subcommand_help() {
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args(["intune", "create", "--help"]);
 
     cmd.assert()
@@ -53,7 +53,7 @@ fn test_intune_create_subcommand_help() {
 
 #[test]
 fn test_intune_extract_subcommand_help() {
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args(["intune", "extract", "--help"]);
 
     cmd.assert()
@@ -64,7 +64,7 @@ fn test_intune_extract_subcommand_help() {
 
 #[test]
 fn test_root_help_shows_subcommands() {
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
     cmd.args(["--help"]);
 
     cmd.assert()
@@ -75,7 +75,7 @@ fn test_root_help_shows_subcommands() {
 
 #[test]
 fn test_no_args_shows_help_or_interactive() {
-    let mut cmd = Command::cargo_bin("iamawrapper").unwrap();
+    let mut cmd = cargo_bin_cmd!("iamawrapper");
 
     // Without args, should either show help or enter interactive mode
     // We'll accept either behavior for now

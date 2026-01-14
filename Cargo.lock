@@ -403,7 +403,7 @@ dependencies = [
 
 [[package]]
 name = "iamawrapper"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "aes",
  "anyhow",
@@ -421,7 +421,6 @@ dependencies = [
  "rand",
  "sha1",
  "sha2",
- "stuckliste",
  "tempfile",
  "thiserror",
  "walkdir",
@@ -500,12 +499,6 @@ name = "normalize-line-endings"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61807f77802ff30975e01f4f071c8ba10c022052f98b3294119f3e615d13e5be"
-
-[[package]]
-name = "normalize-path"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5438dd2b2ff4c6df6e1ce22d825ed2fa93ee2922235cc45186991717f0a892d"
 
 [[package]]
 name = "num-traits"
@@ -767,17 +760,6 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
-
-[[package]]
-name = "stuckliste"
-version = "0.3.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e24c8cd232085298bad5b291c55aac7c18ea586c49228cd4721064f7da4d88c"
-dependencies = [
- "libc",
- "normalize-path",
- "walkdir",
-]
 
 [[package]]
 name = "subtle"

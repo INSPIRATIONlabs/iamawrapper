@@ -61,10 +61,8 @@ jobs:
             os: macos-latest
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            features: --no-default-features --features intune
           - target: aarch64-pc-windows-msvc
             os: windows-latest
-            features: --no-default-features --features intune
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -80,11 +78,11 @@ jobs:
 
       - name: Build with cross
         if: matrix.cross
-        run: cross build --release --target ${{ matrix.target }} ${{ matrix.features }}
+        run: cross build --release --target ${{ matrix.target }}
 
       - name: Build
         if: "!matrix.cross"
-        run: cargo build --release --target ${{ matrix.target }} ${{ matrix.features }}
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
