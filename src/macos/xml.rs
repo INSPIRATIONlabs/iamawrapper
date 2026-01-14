@@ -3,6 +3,63 @@
 //! Generates PackageInfo and Distribution XML files.
 
 use crate::models::PackageError;
+use quick_xml::Writer;
+use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use std::io::Cursor;
+
+type XmlWriter = Writer<Cursor<Vec<u8>>>;
+
+/// Convert any error to PackageError::XmlError.
+fn xml_err<E: std::fmt::Display>(e: E) -> PackageError {
+    PackageError::XmlError {
+        reason: e.to_string(),
+    }
+}
+
+/// Write an event to the XML writer.
+fn write(writer: &mut XmlWriter, event: Event<'_>) -> Result<(), PackageError> {
+    writer.write_event(event).map_err(xml_err)
+}
+
+/// Write a text element: <tag>content</tag>
+fn write_text_element(
+    writer: &mut XmlWriter,
+    tag: &str,
+    content: &str,
+) -> Result<(), PackageError> {
+    write(writer, Event::Start(BytesStart::new(tag)))?;
+    write(writer, Event::Text(BytesText::new(content)))?;
+    write(writer, Event::End(BytesEnd::new(tag)))
+}
+
+/// Write an empty element with a single attribute: <tag attr="value"/>
+fn write_empty_element(
+    writer: &mut XmlWriter,
+    tag: &str,
+    attr: &str,
+    value: &str,
+) -> Result<(), PackageError> {
+    let mut elem = BytesStart::new(tag.to_owned());
+    elem.push_attribute((attr, value));
+    write(writer, Event::Empty(elem))
+}
+
+/// Finalize the writer and convert to String.
+fn finalize(writer: XmlWriter) -> Result<String, PackageError> {
+    let result = writer.into_inner().into_inner();
+    String::from_utf8(result).map_err(xml_err)
+}
+
+/// Create a new XML writer and write the XML declaration with trailing newline.
+fn create_xml_writer() -> Result<XmlWriter, PackageError> {
+    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
+    write(
+        &mut writer,
+        Event::Decl(BytesDecl::new("1.0", Some("utf-8"), None)),
+    )?;
+    write(&mut writer, Event::Text(BytesText::new("\n")))?;
+    Ok(writer)
+}
 
 /// Generate PackageInfo XML document.
 ///
@@ -23,25 +80,7 @@ pub fn generate_packageinfo(
     has_preinstall: bool,
     has_postinstall: bool,
 ) -> Result<String, PackageError> {
-    use quick_xml::Writer;
-    use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
-    use std::io::Cursor;
-
-    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
-
-    // XML declaration
-    writer
-        .write_event(Event::Decl(BytesDecl::new("1.0", Some("utf-8"), None)))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
-
-    // Write newline after declaration
-    writer
-        .write_event(Event::Text(BytesText::new("\n")))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
+    let mut writer = create_xml_writer()?;
 
     // <pkg-info> root element
     let mut pkg_info = BytesStart::new("pkg-info");
@@ -50,70 +89,30 @@ pub fn generate_packageinfo(
     pkg_info.push_attribute(("version", version));
     pkg_info.push_attribute(("install-location", install_location));
     pkg_info.push_attribute(("auth", "root"));
-
-    writer
-        .write_event(Event::Start(pkg_info))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
+    write(&mut writer, Event::Start(pkg_info))?;
 
     // <payload> element
     let mut payload = BytesStart::new("payload");
     payload.push_attribute(("installKBytes", install_kbytes.to_string().as_str()));
     payload.push_attribute(("numberOfFiles", num_files.to_string().as_str()));
-
-    writer
-        .write_event(Event::Empty(payload))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
+    write(&mut writer, Event::Empty(payload))?;
 
     // <scripts> element (if any scripts exist)
     if has_preinstall || has_postinstall {
-        writer
-            .write_event(Event::Start(BytesStart::new("scripts")))
-            .map_err(|e| PackageError::XmlError {
-                reason: e.to_string(),
-            })?;
+        write(&mut writer, Event::Start(BytesStart::new("scripts")))?;
 
         if has_preinstall {
-            let mut preinstall = BytesStart::new("preinstall");
-            preinstall.push_attribute(("file", "./preinstall"));
-            writer
-                .write_event(Event::Empty(preinstall))
-                .map_err(|e| PackageError::XmlError {
-                    reason: e.to_string(),
-                })?;
+            write_empty_element(&mut writer, "preinstall", "file", "./preinstall")?;
         }
-
         if has_postinstall {
-            let mut postinstall = BytesStart::new("postinstall");
-            postinstall.push_attribute(("file", "./postinstall"));
-            writer
-                .write_event(Event::Empty(postinstall))
-                .map_err(|e| PackageError::XmlError {
-                    reason: e.to_string(),
-                })?;
+            write_empty_element(&mut writer, "postinstall", "file", "./postinstall")?;
         }
 
-        writer
-            .write_event(Event::End(BytesEnd::new("scripts")))
-            .map_err(|e| PackageError::XmlError {
-                reason: e.to_string(),
-            })?;
+        write(&mut writer, Event::End(BytesEnd::new("scripts")))?;
     }
 
-    // Close </pkg-info>
-    writer
-        .write_event(Event::End(BytesEnd::new("pkg-info")))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
-
-    let result = writer.into_inner().into_inner();
-    String::from_utf8(result).map_err(|e| PackageError::XmlError {
-        reason: e.to_string(),
-    })
+    write(&mut writer, Event::End(BytesEnd::new("pkg-info")))?;
+    finalize(writer)
 }
 
 /// Generate Distribution XML document.
@@ -129,160 +128,61 @@ pub fn generate_distribution(
     version: &str,
     install_kbytes: u64,
 ) -> Result<String, PackageError> {
-    use quick_xml::Writer;
-    use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
-    use std::io::Cursor;
-
-    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
-
-    // XML declaration
-    writer
-        .write_event(Event::Decl(BytesDecl::new("1.0", Some("utf-8"), None)))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
-
-    // Write newline after declaration
-    writer
-        .write_event(Event::Text(BytesText::new("\n")))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
+    let mut writer = create_xml_writer()?;
 
     // <installer-gui-script> root element
     let mut root = BytesStart::new("installer-gui-script");
     root.push_attribute(("minSpecVersion", "1"));
-
-    writer
-        .write_event(Event::Start(root))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
+    write(&mut writer, Event::Start(root))?;
 
     // <title>
-    writer
-        .write_event(Event::Start(BytesStart::new("title")))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
-    writer
-        .write_event(Event::Text(BytesText::new(title)))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
-    writer
-        .write_event(Event::End(BytesEnd::new("title")))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
+    write_text_element(&mut writer, "title", title)?;
 
     // <options>
     let mut options = BytesStart::new("options");
     options.push_attribute(("customize", "never"));
     options.push_attribute(("require-scripts", "false"));
     options.push_attribute(("hostArchitectures", "x86_64,arm64"));
-
-    writer
-        .write_event(Event::Empty(options))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
+    write(&mut writer, Event::Empty(options))?;
 
     // <domains>
     let mut domains = BytesStart::new("domains");
     domains.push_attribute(("enable_anywhere", "false"));
     domains.push_attribute(("enable_currentUserHome", "false"));
     domains.push_attribute(("enable_localSystem", "true"));
-
-    writer
-        .write_event(Event::Empty(domains))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
+    write(&mut writer, Event::Empty(domains))?;
 
     // <choices-outline>
-    writer
-        .write_event(Event::Start(BytesStart::new("choices-outline")))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
-
-    let mut line = BytesStart::new("line");
-    line.push_attribute(("choice", "default"));
-    writer
-        .write_event(Event::Empty(line))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
-
-    writer
-        .write_event(Event::End(BytesEnd::new("choices-outline")))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
+    write(
+        &mut writer,
+        Event::Start(BytesStart::new("choices-outline")),
+    )?;
+    write_empty_element(&mut writer, "line", "choice", "default")?;
+    write(&mut writer, Event::End(BytesEnd::new("choices-outline")))?;
 
     // <choice>
     let mut choice = BytesStart::new("choice");
     choice.push_attribute(("id", "default"));
     choice.push_attribute(("visible", "false"));
     choice.push_attribute(("title", title));
-
-    writer
-        .write_event(Event::Start(choice))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
-
-    // <pkg-ref> inside choice
-    let mut pkg_ref_inner = BytesStart::new("pkg-ref");
-    pkg_ref_inner.push_attribute(("id", identifier));
-    writer
-        .write_event(Event::Empty(pkg_ref_inner))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
-
-    writer
-        .write_event(Event::End(BytesEnd::new("choice")))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
+    write(&mut writer, Event::Start(choice))?;
+    write_empty_element(&mut writer, "pkg-ref", "id", identifier)?;
+    write(&mut writer, Event::End(BytesEnd::new("choice")))?;
 
     // <pkg-ref> with details
     let mut pkg_ref = BytesStart::new("pkg-ref");
     pkg_ref.push_attribute(("id", identifier));
     pkg_ref.push_attribute(("version", version));
     pkg_ref.push_attribute(("installKBytes", install_kbytes.to_string().as_str()));
+    write(&mut writer, Event::Start(pkg_ref))?;
+    write(&mut writer, Event::Text(BytesText::new("#base.pkg")))?;
+    write(&mut writer, Event::End(BytesEnd::new("pkg-ref")))?;
 
-    writer
-        .write_event(Event::Start(pkg_ref))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
-
-    writer
-        .write_event(Event::Text(BytesText::new("#base.pkg")))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
-
-    writer
-        .write_event(Event::End(BytesEnd::new("pkg-ref")))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
-
-    // Close </installer-gui-script>
-    writer
-        .write_event(Event::End(BytesEnd::new("installer-gui-script")))
-        .map_err(|e| PackageError::XmlError {
-            reason: e.to_string(),
-        })?;
-
-    let result = writer.into_inner().into_inner();
-    String::from_utf8(result).map_err(|e| PackageError::XmlError {
-        reason: e.to_string(),
-    })
+    write(
+        &mut writer,
+        Event::End(BytesEnd::new("installer-gui-script")),
+    )?;
+    finalize(writer)
 }
 
 #[cfg(test)]
