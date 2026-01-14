@@ -3,6 +3,7 @@
 //! XAR (eXtensible ARchive) is the container format for .pkg files.
 //! Structure: 28-byte header + zlib-compressed XML TOC + heap (file data)
 
+use std::fmt::Display;
 use std::io::Write;
 
 use flate2::Compression;
@@ -12,6 +13,13 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use sha1::{Digest, Sha1};
 
 use crate::models::PackageError;
+
+/// Convert any displayable error into a PackageError::XarError.
+fn xar_err<E: Display>(e: E) -> PackageError {
+    PackageError::XarError {
+        reason: e.to_string(),
+    }
+}
 
 /// XAR magic number "xar!" (0x78617221)
 const XAR_MAGIC: &[u8; 4] = b"xar!";
@@ -167,57 +175,30 @@ impl XarBuilder {
     const SHA1_SIZE: u64 = 20;
 
     /// Generate the TOC XML for the archive.
-    /// The heap_start_offset is where file data begins (after the TOC checksum).
     pub fn generate_toc_xml(&self) -> Result<String, PackageError> {
         let mut writer = Writer::new_with_indent(Vec::new(), b' ', 2);
 
-        // XML declaration
         writer
             .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
-
-        // <xar>
-        let xar_start = BytesStart::new("xar");
+            .map_err(xar_err)?;
         writer
-            .write_event(Event::Start(xar_start))
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
-
-        // <toc>
-        let toc_start = BytesStart::new("toc");
+            .write_event(Event::Start(BytesStart::new("xar")))
+            .map_err(xar_err)?;
         writer
-            .write_event(Event::Start(toc_start))
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
+            .write_event(Event::Start(BytesStart::new("toc")))
+            .map_err(xar_err)?;
 
-        // Write TOC checksum element (points to heap offset 0)
         self.write_toc_checksum(&mut writer)?;
-
-        // Write entries (file data starts after the TOC checksum)
         self.write_toc_entries(&mut writer, None, Self::SHA1_SIZE)?;
 
-        // </toc>
         writer
             .write_event(Event::End(BytesEnd::new("toc")))
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
-
-        // </xar>
+            .map_err(xar_err)?;
         writer
             .write_event(Event::End(BytesEnd::new("xar")))
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
+            .map_err(xar_err)?;
 
-        let xml_bytes = writer.into_inner();
-        String::from_utf8(xml_bytes).map_err(|e| PackageError::XarError {
-            reason: e.to_string(),
-        })
+        String::from_utf8(writer.into_inner()).map_err(xar_err)
     }
 
     /// Write TOC entries recursively.
@@ -234,135 +215,91 @@ impl XarBuilder {
                 continue;
             }
 
-            // <file id="N">
             let mut file_start = BytesStart::new("file");
             file_start.push_attribute(("id", entry.id.to_string().as_str()));
             writer
                 .write_event(Event::Start(file_start))
-                .map_err(|e| PackageError::XarError {
-                    reason: e.to_string(),
-                })?;
+                .map_err(xar_err)?;
 
-            // <name>
             self.write_simple_element(writer, "name", &entry.name)?;
 
-            // <type>
             let type_str = match entry.entry_type {
                 EntryType::File => "file",
                 EntryType::Directory => "directory",
             };
             self.write_simple_element(writer, "type", type_str)?;
 
-            // For files, write data section
             if entry.entry_type == EntryType::File {
-                // <data>
                 writer
                     .write_event(Event::Start(BytesStart::new("data")))
-                    .map_err(|e| PackageError::XarError {
-                        reason: e.to_string(),
-                    })?;
+                    .map_err(xar_err)?;
 
                 self.write_simple_element(writer, "offset", &current_offset.to_string())?;
                 self.write_simple_element(writer, "size", &entry.data.len().to_string())?;
                 self.write_simple_element(writer, "length", &entry.data.len().to_string())?;
 
-                // <extracted-checksum style="sha1">
                 let checksum = Self::compute_sha1(&entry.data);
-                let mut cksum_start = BytesStart::new("extracted-checksum");
-                cksum_start.push_attribute(("style", "sha1"));
-                writer.write_event(Event::Start(cksum_start)).map_err(|e| {
-                    PackageError::XarError {
-                        reason: e.to_string(),
-                    }
-                })?;
-                writer
-                    .write_event(Event::Text(BytesText::new(&checksum)))
-                    .map_err(|e| PackageError::XarError {
-                        reason: e.to_string(),
-                    })?;
-                writer
-                    .write_event(Event::End(BytesEnd::new("extracted-checksum")))
-                    .map_err(|e| PackageError::XarError {
-                        reason: e.to_string(),
-                    })?;
+                self.write_checksum_element(writer, "extracted-checksum", &checksum)?;
+                self.write_checksum_element(writer, "archived-checksum", &checksum)?;
 
-                // <archived-checksum style="sha1">
-                let mut arch_cksum_start = BytesStart::new("archived-checksum");
-                arch_cksum_start.push_attribute(("style", "sha1"));
-                writer
-                    .write_event(Event::Start(arch_cksum_start))
-                    .map_err(|e| PackageError::XarError {
-                        reason: e.to_string(),
-                    })?;
-                writer
-                    .write_event(Event::Text(BytesText::new(&checksum)))
-                    .map_err(|e| PackageError::XarError {
-                        reason: e.to_string(),
-                    })?;
-                writer
-                    .write_event(Event::End(BytesEnd::new("archived-checksum")))
-                    .map_err(|e| PackageError::XarError {
-                        reason: e.to_string(),
-                    })?;
-
-                // <encoding style="application/octet-stream"/>
                 let mut encoding = BytesStart::new("encoding");
                 encoding.push_attribute(("style", "application/octet-stream"));
                 writer
                     .write_event(Event::Empty(encoding))
-                    .map_err(|e| PackageError::XarError {
-                        reason: e.to_string(),
-                    })?;
+                    .map_err(xar_err)?;
 
-                // </data>
                 writer
                     .write_event(Event::End(BytesEnd::new("data")))
-                    .map_err(|e| PackageError::XarError {
-                        reason: e.to_string(),
-                    })?;
+                    .map_err(xar_err)?;
 
                 current_offset += entry.data.len() as u64;
             }
 
-            // Write child entries for directories
             if entry.entry_type == EntryType::Directory {
                 current_offset = self.write_toc_entries(writer, Some(entry.id), current_offset)?;
             }
 
-            // </file>
             writer
                 .write_event(Event::End(BytesEnd::new("file")))
-                .map_err(|e| PackageError::XarError {
-                    reason: e.to_string(),
-                })?;
+                .map_err(xar_err)?;
         }
 
         Ok(current_offset)
     }
 
+    /// Write a checksum element with style="sha1" attribute.
+    fn write_checksum_element<W: Write>(
+        &self,
+        writer: &mut Writer<W>,
+        tag: &str,
+        checksum: &str,
+    ) -> Result<(), PackageError> {
+        let mut elem = BytesStart::new(tag);
+        elem.push_attribute(("style", "sha1"));
+        writer.write_event(Event::Start(elem)).map_err(xar_err)?;
+        writer
+            .write_event(Event::Text(BytesText::new(checksum)))
+            .map_err(xar_err)?;
+        writer
+            .write_event(Event::End(BytesEnd::new(tag)))
+            .map_err(xar_err)?;
+        Ok(())
+    }
+
     /// Write the TOC checksum element.
     fn write_toc_checksum<W: Write>(&self, writer: &mut Writer<W>) -> Result<(), PackageError> {
-        // <checksum style="sha1">
         let mut checksum_start = BytesStart::new("checksum");
         checksum_start.push_attribute(("style", "sha1"));
         writer
             .write_event(Event::Start(checksum_start))
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
+            .map_err(xar_err)?;
 
-        // <offset>0</offset>
         self.write_simple_element(writer, "offset", "0")?;
-
-        // <size>20</size> (SHA1 is 20 bytes)
         self.write_simple_element(writer, "size", "20")?;
 
-        // </checksum>
         writer
             .write_event(Event::End(BytesEnd::new("checksum")))
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
+            .map_err(xar_err)?;
 
         Ok(())
     }
@@ -376,19 +313,13 @@ impl XarBuilder {
     ) -> Result<(), PackageError> {
         writer
             .write_event(Event::Start(BytesStart::new(tag)))
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
+            .map_err(xar_err)?;
         writer
             .write_event(Event::Text(BytesText::new(content)))
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
+            .map_err(xar_err)?;
         writer
             .write_event(Event::End(BytesEnd::new(tag)))
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
+            .map_err(xar_err)?;
         Ok(())
     }
 
@@ -402,60 +333,27 @@ impl XarBuilder {
 
     /// Finish building and write the archive.
     pub fn finish<W: Write>(&mut self, writer: &mut W) -> Result<(), PackageError> {
-        // Generate TOC XML
         let toc_xml = self.generate_toc_xml()?;
         let toc_uncompressed = toc_xml.as_bytes();
 
-        // Compress TOC with zlib
         let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
-        encoder
-            .write_all(toc_uncompressed)
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
-        let toc_compressed = encoder.finish().map_err(|e| PackageError::XarError {
-            reason: e.to_string(),
-        })?;
+        encoder.write_all(toc_uncompressed).map_err(xar_err)?;
+        let toc_compressed = encoder.finish().map_err(xar_err)?;
 
-        // Create header
         let header = XarHeader::new(toc_compressed.len() as u64, toc_uncompressed.len() as u64);
 
-        // Write header
-        writer
-            .write_all(&header.to_bytes())
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
+        writer.write_all(&header.to_bytes()).map_err(xar_err)?;
+        writer.write_all(&toc_compressed).map_err(xar_err)?;
 
-        // Write compressed TOC
-        writer
-            .write_all(&toc_compressed)
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
-
-        // Compute SHA1 of compressed TOC for the heap checksum
+        // Write heap: TOC checksum (20 bytes at offset 0), then file data
         let toc_checksum = Self::compute_sha1(&toc_compressed);
-        let toc_checksum_bytes =
-            hex::decode(&toc_checksum).map_err(|e| PackageError::XarError {
-                reason: format!("Failed to decode TOC checksum: {}", e),
-            })?;
+        let toc_checksum_bytes = hex::decode(&toc_checksum)
+            .map_err(|e| xar_err(format!("Failed to decode TOC checksum: {}", e)))?;
+        writer.write_all(&toc_checksum_bytes).map_err(xar_err)?;
 
-        // Write heap: TOC checksum first (20 bytes at offset 0)
-        writer
-            .write_all(&toc_checksum_bytes)
-            .map_err(|e| PackageError::XarError {
-                reason: e.to_string(),
-            })?;
-
-        // Write heap: file data (starting at offset 20)
         for entry in &self.entries {
             if entry.entry_type == EntryType::File {
-                writer
-                    .write_all(&entry.data)
-                    .map_err(|e| PackageError::XarError {
-                        reason: e.to_string(),
-                    })?;
+                writer.write_all(&entry.data).map_err(xar_err)?;
             }
         }
 
