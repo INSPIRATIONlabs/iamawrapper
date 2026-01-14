@@ -1,6 +1,6 @@
 [package]
 name = "iamawrapper"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 authors = ["INSPIRATIONLABS GmbH"]
 description = "Cross-platform replacement for Microsoft Win32 Content Prep Tool and macOS package builder"
