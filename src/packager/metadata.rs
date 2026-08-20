@@ -135,10 +135,11 @@ pub fn parse_detection_xml(xml: &str) -> PackageResult<DetectionMetadata> {
                 let decoded = e.decode().map_err(|err| PackageError::XmlError {
                     reason: format!("Failed to decode text: {}", err),
                 })?;
-                let text =
-                    quick_xml::escape::unescape(&decoded).map_err(|err| PackageError::XmlError {
+                let text = quick_xml::escape::unescape(&decoded).map_err(|err| {
+                    PackageError::XmlError {
                         reason: format!("Failed to unescape text: {}", err),
-                    })?;
+                    }
+                })?;
 
                 match current_element.as_str() {
                     "Name" => name = text.to_string(),
