@@ -115,7 +115,7 @@ fn write_element<W: std::io::Write>(
 /// Parse Detection.xml content into DetectionMetadata.
 pub fn parse_detection_xml(xml: &str) -> PackageResult<DetectionMetadata> {
     let mut reader = Reader::from_str(xml);
-    reader.trim_text(true);
+    reader.config_mut().trim_text(true);
 
     let mut name = String::new();
     let mut unencrypted_content_size: u64 = 0;
@@ -132,9 +132,13 @@ pub fn parse_detection_xml(xml: &str) -> PackageResult<DetectionMetadata> {
                 current_element = String::from_utf8_lossy(e.name().as_ref()).to_string();
             }
             Ok(Event::Text(e)) => {
-                let text = e.unescape().map_err(|err| PackageError::XmlError {
-                    reason: format!("Failed to unescape text: {}", err),
+                let decoded = e.decode().map_err(|err| PackageError::XmlError {
+                    reason: format!("Failed to decode text: {}", err),
                 })?;
+                let text =
+                    quick_xml::escape::unescape(&decoded).map_err(|err| PackageError::XmlError {
+                        reason: format!("Failed to unescape text: {}", err),
+                    })?;
 
                 match current_element.as_str() {
                     "Name" => name = text.to_string(),
